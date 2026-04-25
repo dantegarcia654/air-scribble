@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>scwibble</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <!-- ── Screen 1: Join / Create ────────────────────────────────────────── -->
+  <div id="lobby-wrapper">
+    <div class="lobby-card">
+
+      <div class="logo">
+        <div class="logo-icon-box">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+            <path d="M2 13 Q5 7 8 12 Q11 17 14 10 Q17 4 19 8"
+                  stroke="#111111" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <span class="logo-text">scw<span class="logo-i">i</span>bble</span>
+      </div>
+
+      <p class="tagline">draw with your hands. guess with your brain.</p>
+
+      <input type="text" id="name-input" placeholder="your name" maxlength="20" autocomplete="off" />
+
+      <button id="create-btn" class="btn btn-black">create room</button>
+
+      <div class="divider">or join</div>
+
+      <div class="join-row">
+        <input type="text" id="code-input" placeholder="room code" maxlength="4" autocomplete="off" />
+        <button id="join-btn" class="btn btn-blue">join →</button>
+      </div>
+
+      <p id="error-msg" class="error hidden"></p>
+    </div>
+  </div>
+
+  <!-- ── Game screen (webcam + drawing + all overlays) ──────────────────── -->
+  <div id="game-screen" class="hidden">
+    <video id="webcam" autoplay playsinline muted></video>
+    <canvas id="paintCanvas"></canvas>
+    <canvas id="overlay"></canvas>
+
+    <!-- ── Screen 2: Pregame lobby (solid white overlay) ─────────────────── -->
+    <div id="pregame-overlay" class="hidden">
+      <div class="pg-inner">
+
+        <div class="logo">
+          <div class="logo-icon-box">
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+              <path d="M2 13 Q5 7 8 12 Q11 17 14 10 Q17 4 19 8"
+                    stroke="#111111" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </div>
+          <span class="logo-text">scw<span class="logo-i">i</span>bble</span>
+        </div>
+
+        <div class="code-pill">
+          <span id="pg-code"></span>
+        </div>
+        <p class="code-hint">share this code with friends</p>
+
+        <ul id="pg-players" class="player-list"></ul>
+
+        <p id="pg-status" class="pg-status"></p>
+        <button id="start-btn" class="btn btn-black hidden">start game →</button>
+      </div>
+    </div>
+
+    <!-- ── Tutorial overlay ──────────────────────────────────────────────── -->
+    <div id="tutorial-overlay" class="hidden">
+      <div class="tut-card">
+        <div class="tut-webcam-wrap">
+          <video id="tut-webcam" autoplay playsinline muted></video>
+        </div>
+        <div class="tut-body">
+          <div class="tut-step-content">
+            <div class="tut-icon" id="tut-icon"></div>
+            <h3 class="tut-title" id="tut-title"></h3>
+            <p class="tut-desc" id="tut-desc"></p>
+          </div>
+          <div class="tut-dots" id="tut-dots"></div>
+          <div class="tut-btns">
+            <button id="tut-next-btn" class="btn btn-black">next →</button>
+            <button id="tut-skip-btn" class="btn btn-outline">skip tutorial</button>
+          </div>
+          <p id="tut-waiting" class="tut-waiting hidden">waiting for other players…</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Toolbar (drawer only) ─────────────────────────────────────────── -->
+    <div id="toolbar" class="hidden">
+      <div class="tool-btn active" data-color="#3b82f6" style="--c:#3b82f6" title="Blue"></div>
+      <div class="tool-btn" data-color="#ef4444" style="--c:#ef4444" title="Red"></div>
+      <div class="tool-btn" data-color="#22c55e" style="--c:#22c55e" title="Green"></div>
+      <div class="tool-btn" data-color="#facc15" style="--c:#facc15" title="Yellow"></div>
+      <div class="tool-btn" data-color="#a855f7" style="--c:#a855f7" title="Purple"></div>
+      <div class="toolbar-sep"></div>
+      <div class="tool-btn eraser-btn" data-color="eraser" style="--c:transparent" title="Eraser">⌫</div>
+    </div>
+
+    <!-- ── Room info pill (top-right, always visible) ────────────────────── -->
+    <div id="room-info">
+      <span id="ri-code"></span>
+      <span class="ri-sep">·</span>
+      <span id="ri-players"></span>
+    </div>
+
+    <!-- ── Timer (top-left) ──────────────────────────────────────────────── -->
+    <div id="timer-display" class="hidden">
+      <span id="timer-num">60</span><span class="timer-unit">s</span>
+    </div>
+
+    <!-- ── Word display (below toolbar) ─────────────────────────────────── -->
+    <div id="word-display" class="hidden"></div>
+
+    <!-- ── Scoreboard (left side) ────────────────────────────────────────── -->
+    <div id="scoreboard" class="hidden"></div>
+
+    <!-- ── Guess input (bottom, non-drawers) ────────────────────────────── -->
+    <div id="guess-area" class="hidden">
+      <input type="text" id="guess-input" placeholder="type your guess and press enter…"
+             maxlength="60" autocomplete="off" spellcheck="false" />
+    </div>
+
+    <!-- ── Floating guess bubbles ────────────────────────────────────────── -->
+    <div id="bubbles-area"></div>
+
+    <!-- ── Round transition overlay ─────────────────────────────────────── -->
+    <div id="round-overlay" class="hidden">
+      <div id="round-msg"></div>
+    </div>
+
+    <!-- ── Screen 3: Winner screen ───────────────────────────────────────── -->
+    <div id="winner-screen" class="hidden">
+      <canvas id="confetti-canvas"></canvas>
+      <div id="winner-content">
+        <div class="winner-star-box">★</div>
+        <h2 id="winner-title"></h2>
+        <p id="winner-subtitle" class="winner-subtitle"></p>
+        <div id="winner-scores"></div>
+        <div id="session-wins" class="session-wins hidden"></div>
+        <div id="invite-panel" class="invite-panel hidden">
+          <p class="invite-hint">share this code with a friend</p>
+          <div class="code-pill"><span id="invite-code"></span></div>
+        </div>
+        <div class="winner-btns">
+          <button id="play-again-btn" class="btn btn-black hidden">play again</button>
+          <button id="back-to-lobby-btn" class="btn btn-outline">back to lobby</button>
+          <button id="invite-btn" class="btn btn-outline">invite a friend +</button>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- #game-screen -->
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+  <script src="app.js"></script>
+</body>
+</html>
