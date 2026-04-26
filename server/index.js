@@ -230,6 +230,15 @@ io.on('connection', (socket) => {
     }
   });
 
+  socket.on('canvas-frame', (data) => {
+    const { roomCode } = socket.data;
+    const room         = rooms[roomCode];
+    if (!room?.game) return;
+    const drawer = room.players[room.game.drawerIndex];
+    if (drawer?.id !== socket.id) return;
+    socket.to(roomCode).emit('canvas-frame', data);
+  });
+
   socket.on('disconnect', () => {
     const { roomCode, name } = socket.data;
     console.log(`[disconnect] ${name ?? socket.id}${roomCode ? ` from room ${roomCode}` : ''}`);

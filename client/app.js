@@ -52,9 +52,11 @@ const confettiCanvas = document.getElementById('confetti-canvas');
 const video         = document.getElementById('webcam');
 const paintCanvas   = document.getElementById('paintCanvas');
 const overlayCanvas = document.getElementById('overlay');
+const streamCanvas  = document.getElementById('streamCanvas');
 const pCtx  = paintCanvas.getContext('2d');
 const oCtx  = overlayCanvas.getContext('2d');
 const cfCtx = confettiCanvas.getContext('2d');
+const sCtx  = streamCanvas.getContext('2d');
 
 // ── Hand skeleton connections ─────────────────────────────────────────────────
 const CONNECTIONS = [
@@ -117,6 +119,16 @@ let currentDrawerId = null;
 let lobbyPlayers    = [];
 let lobbyCreatorId  = null;
 
+// ── Camera / broadcast state ──────────────────────────────────────────────────
+let mpCamera      = null;
+let cameraActive  = true;  // false → skip hands.send() without stopping the stream
+let frameInterval = null;
+
+// Pre-allocated capture canvas (640×360 for bandwidth efficiency)
+const captureCanvas = document.createElement('canvas');
+captureCanvas.width = 640; captureCanvas.height = 360;
+const captureCtx = captureCanvas.getContext('2d');
+
 // ── Session wins tracker ──────────────────────────────────────────────────────
 const sessionWins = {};
 
@@ -162,8 +174,8 @@ function showElFade(el) {
 
 // ── Canvas sizing ─────────────────────────────────────────────────────────────
 function resizeCanvases() {
-  paintCanvas.width  = overlayCanvas.width  = window.innerWidth;
-  paintCanvas.height = overlayCanvas.height = window.innerHeight;
+  paintCanvas.width  = overlayCanvas.width  = streamCanvas.width  = window.innerWidth;
+  paintCanvas.height = overlayCanvas.height = streamCanvas.height = window.innerHeight;
 }
 window.addEventListener('resize', resizeCanvases);
 
@@ -486,11 +498,64 @@ function startMediaPipe() {
   hands.setOptions({ maxNumHands: 1, modelComplexity: 1, minDetectionConfidence: 0.7, minTrackingConfidence: 0.5 });
   hands.onResults(onResults);
 
-  const camera = new Camera(video, {
-    onFrame: async () => { await hands.send({ image: video }); },
+  mpCamera = new Camera(video, {
+    onFrame: async () => {
+      if (cameraActive) await hands.send({ image: video });
+    },
     width: 1280, height: 720,
   });
-  camera.start().catch(() => showToast('Camera access denied — reload and allow camera.'));
+  mpCamera.start().catch(() => showToast('Camera access denied — reload and allow camera.'));
+}
+
+function stopCamera() {
+  cameraActive = false;
+  oCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
+}
+
+function resumeCamera() {
+  cameraActive = true;
+}
+
+function showWebcam() {
+  video.style.display = '';
+  streamCanvas.style.display = 'none';
+}
+
+function showStream() {
+  video.style.display = 'none';
+  streamCanvas.style.display = '';
+}
+
+function captureAndEmitFrame() {
+  const w = captureCanvas.width, h = captureCanvas.height;
+  const vw = video.videoWidth || 1280, vh = video.videoHeight || 720;
+  const scale = Math.max(w / vw, h / vh);
+  const rw = vw * scale, rh = vh * scale;
+  const ox = (w - rw) / 2, oy = (h - rh) / 2;
+
+  captureCtx.clearRect(0, 0, w, h);
+
+  if (video.readyState >= 2) {
+    captureCtx.save();
+    captureCtx.translate(w, 0);
+    captureCtx.scale(-1, 1);
+    captureCtx.drawImage(video, ox, oy, rw, rh);
+    captureCtx.restore();
+  }
+
+  // Scale paintCanvas (full resolution) down into the capture frame
+  captureCtx.drawImage(paintCanvas, 0, 0, w, h);
+
+  socket.emit('canvas-frame', captureCanvas.toDataURL('image/jpeg', 0.35));
+}
+
+function startFrameBroadcast() {
+  stopFrameBroadcast();
+  frameInterval = setInterval(captureAndEmitFrame, 100);
+}
+
+function stopFrameBroadcast() {
+  if (frameInterval) { clearInterval(frameInterval); frameInterval = null; }
 }
 
 // ── Avatar helper ─────────────────────────────────────────────────────────────
@@ -776,6 +841,10 @@ socket.on('player-left', ({ players, creatorId }) => {
 // ── Socket: game events ───────────────────────────────────────────────────────
 socket.on('game-started', ({ players, showTutorial }) => {
   stopConfetti();
+  stopFrameBroadcast();
+  resumeCamera();
+  showWebcam();
+  pCtx.clearRect(0, 0, paintCanvas.width, paintCanvas.height);
   winnerScreen.classList.add('hidden');
   invitePanel.classList.add('hidden');
   inviteBtn.textContent = 'invite a friend +';
@@ -805,6 +874,19 @@ socket.on('game-started', ({ players, showTutorial }) => {
 socket.on('round-start', ({ drawerId, drawerName, timeLeft, scores }) => {
   currentDrawerId = drawerId;
   amDrawer        = (drawerId === socket.id);
+
+  // Manage camera and stream based on role
+  if (amDrawer) {
+    showWebcam();
+    resumeCamera();
+    pCtx.clearRect(0, 0, paintCanvas.width, paintCanvas.height);
+    startFrameBroadcast();
+  } else {
+    stopFrameBroadcast();
+    stopCamera();
+    showStream();
+    pCtx.clearRect(0, 0, paintCanvas.width, paintCanvas.height);
+  }
 
   // Hide tutorial overlay if it's up
   if (!tutorialOverlay.classList.contains('hidden')) {
@@ -892,6 +974,10 @@ socket.on('game-over', ({ winner, scores }) => {
   invitePanel.classList.add('hidden');
   inviteBtn.textContent = 'invite a friend +';
 
+  stopFrameBroadcast();
+  resumeCamera();
+  showWebcam();
+
   showEl(winnerScreen);
   startConfetti();
 });
@@ -905,6 +991,9 @@ socket.on('game-aborted', ({ reason }) => {
   roundOverlay.classList.add('hidden');
   scoreboard.classList.add('hidden');
   tutorialOverlay.classList.add('hidden');
+  stopFrameBroadcast();
+  resumeCamera();
+  showWebcam();
   showEl(pregameOverlay);
   renderPregamePlayers(lobbyPlayers, lobbyCreatorId);
   showToast(reason);
@@ -921,14 +1010,20 @@ backToLobbyBtn.addEventListener('click', () => {
 });
 
 // ── Remote drawing sync ───────────────────────────────────────────────────────
-socket.on('remote-stroke', ({ from, to, color, brushSize: bs, isErasing: ie }) => {
-  const f = { x: from.x * paintCanvas.width, y: from.y * paintCanvas.height };
-  const t = { x: to.x   * paintCanvas.width, y: to.y   * paintCanvas.height };
-  applyStrokeToCtx(pCtx, f, t, color, bs, ie);
-});
+// Guessers receive the drawer's composite frame (webcam + drawing) directly,
+// so remote-stroke and remote-clear are no-ops on the guesser side.
+socket.on('remote-stroke', () => {});
+socket.on('remote-clear',  () => {});
 
-socket.on('remote-clear', () => {
-  pCtx.clearRect(0, 0, paintCanvas.width, paintCanvas.height);
+// ── Composite frame receiver (guessers only) ──────────────────────────────────
+socket.on('canvas-frame', (dataURL) => {
+  if (amDrawer) return;
+  const img = new Image();
+  img.onload = () => {
+    sCtx.clearRect(0, 0, streamCanvas.width, streamCanvas.height);
+    sCtx.drawImage(img, 0, 0, streamCanvas.width, streamCanvas.height);
+  };
+  img.src = dataURL;
 });
 
 // ── Guess submission ──────────────────────────────────────────────────────────

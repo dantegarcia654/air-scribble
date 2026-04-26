@@ -222,9 +222,10 @@ input[type="text"]::placeholder { color: #bbb; }
   width: 100%; height: 100%;
 }
 
-#webcam      { object-fit: cover; transform: scaleX(-1); z-index: 0; }
-#paintCanvas { z-index: 1; pointer-events: none; }
-#overlay     { z-index: 2; pointer-events: none; }
+#webcam       { object-fit: cover; transform: scaleX(-1); z-index: 0; }
+#streamCanvas { z-index: 0; display: none; }
+#paintCanvas  { z-index: 1; pointer-events: none; }
+#overlay      { z-index: 2; pointer-events: none; }
 
 /* ════════════════════════════════════════════════════════════════════════════
    SCREEN 2 — Pregame lobby (solid white overlay)
