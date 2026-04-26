@@ -521,7 +521,7 @@ function showWebcam() {
 
 function showStream() {
   video.style.display = 'none';
-  streamCanvas.style.display = '';
+  streamCanvas.style.display = 'none';
 }
 
 function captureAndEmitFrame() {
@@ -1024,10 +1024,11 @@ socket.on('remote-clear',  () => {});
 // ── Composite frame receiver (guessers only) ──────────────────────────────────
 socket.on('canvas-frame', (dataURL) => {
   if (amDrawer) return;
+  console.log('frame received, size:', dataURL.length);
   const img = new Image();
   img.onload = () => {
-    sCtx.clearRect(0, 0, streamCanvas.width, streamCanvas.height);
-    sCtx.drawImage(img, 0, 0, streamCanvas.width, streamCanvas.height);
+    oCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
+    oCtx.drawImage(img, 0, 0, overlayCanvas.width, overlayCanvas.height);
   };
   img.src = dataURL;
 });
