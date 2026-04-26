@@ -529,22 +529,20 @@ function captureAndEmitFrame() {
 
   const vw = video.videoWidth;
   const vh = video.videoHeight;
-  if (!vw || !vh) return; // video not yet initialized
+  console.log('[capture] readyState:', video.readyState, 'vw:', vw, 'vh:', vh);
+  if (!vw || !vh || video.readyState < 2) return;
 
-  // Resize capture canvas to match the video's native resolution
   if (captureCanvas.width !== vw || captureCanvas.height !== vh) {
     captureCanvas.width  = vw;
     captureCanvas.height = vh;
   }
 
-  // Layer 1: draw the live webcam frame, mirrored to match the drawer's display
   captureCtx.save();
   captureCtx.translate(vw, 0);
   captureCtx.scale(-1, 1);
   captureCtx.drawImage(video, 0, 0, vw, vh);
   captureCtx.restore();
 
-  // Layer 2: draw the paint canvas on top, scaled to video dimensions
   captureCtx.drawImage(paintCanvas, 0, 0, vw, vh);
 
   socket.emit('canvas-frame', captureCanvas.toDataURL('image/jpeg', 0.35));
@@ -552,7 +550,14 @@ function captureAndEmitFrame() {
 
 function startFrameBroadcast() {
   stopFrameBroadcast();
-  frameInterval = setInterval(captureAndEmitFrame, 100);
+  const begin = () => {
+    if (amDrawer && gameActive) frameInterval = setInterval(captureAndEmitFrame, 100);
+  };
+  if (video.readyState >= 2 && video.videoWidth > 0) {
+    begin();
+  } else {
+    video.addEventListener('canplay', begin, { once: true });
+  }
 }
 
 function stopFrameBroadcast() {
