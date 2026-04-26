@@ -124,9 +124,7 @@ let mpCamera      = null;
 let cameraActive  = true;  // false → skip hands.send() without stopping the stream
 let frameInterval = null;
 
-// Pre-allocated capture canvas (640×360 for bandwidth efficiency)
 const captureCanvas = document.createElement('canvas');
-captureCanvas.width = 640; captureCanvas.height = 360;
 const captureCtx = captureCanvas.getContext('2d');
 
 // ── Session wins tracker ──────────────────────────────────────────────────────
@@ -527,24 +525,27 @@ function showStream() {
 }
 
 function captureAndEmitFrame() {
-  const w = captureCanvas.width, h = captureCanvas.height;
-  const vw = video.videoWidth || 1280, vh = video.videoHeight || 720;
-  const scale = Math.max(w / vw, h / vh);
-  const rw = vw * scale, rh = vh * scale;
-  const ox = (w - rw) / 2, oy = (h - rh) / 2;
+  if (!amDrawer || !gameActive) return;
 
-  captureCtx.clearRect(0, 0, w, h);
+  const vw = video.videoWidth;
+  const vh = video.videoHeight;
+  if (!vw || !vh) return; // video not yet initialized
 
-  if (video.readyState >= 2) {
-    captureCtx.save();
-    captureCtx.translate(w, 0);
-    captureCtx.scale(-1, 1);
-    captureCtx.drawImage(video, ox, oy, rw, rh);
-    captureCtx.restore();
+  // Resize capture canvas to match the video's native resolution
+  if (captureCanvas.width !== vw || captureCanvas.height !== vh) {
+    captureCanvas.width  = vw;
+    captureCanvas.height = vh;
   }
 
-  // Scale paintCanvas (full resolution) down into the capture frame
-  captureCtx.drawImage(paintCanvas, 0, 0, w, h);
+  // Layer 1: draw the live webcam frame, mirrored to match the drawer's display
+  captureCtx.save();
+  captureCtx.translate(vw, 0);
+  captureCtx.scale(-1, 1);
+  captureCtx.drawImage(video, 0, 0, vw, vh);
+  captureCtx.restore();
+
+  // Layer 2: draw the paint canvas on top, scaled to video dimensions
+  captureCtx.drawImage(paintCanvas, 0, 0, vw, vh);
 
   socket.emit('canvas-frame', captureCanvas.toDataURL('image/jpeg', 0.35));
 }
